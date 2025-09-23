@@ -1,0 +1,11 @@
+# Persistent Volume Claim for Weaviate
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: weaviate-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi   # Why: Allocate 1Gi storage to persist index

@@ -1,0 +1,45 @@
+# Deployment + Service for Weaviate
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: weaviate
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: weaviate
+  template:
+    metadata:
+      labels:
+        app: weaviate
+    spec:
+      containers:
+      - name: weaviate
+        image: semitechnologies/weaviate:1.25.6
+        ports:
+        - containerPort: 8080
+        - containerPort: 50051
+        volumeMounts:
+        - name: weaviate-data
+          mountPath: /var/lib/weaviate
+        envFrom:
+        - configMapRef:
+            name: weaviate-config
+      volumes:
+      - name: weaviate-data
+        persistentVolumeClaim:
+          claimName: weaviate-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: weaviate-service
+spec:
+  type: LoadBalancer
+  selector:
+    app: weaviate
+  ports:
+  - port: 8080
+    targetPort: 8080
+  - port: 50051
+    targetPort: 50051
