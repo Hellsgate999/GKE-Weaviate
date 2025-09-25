@@ -1,0 +1,129 @@
+---
+# ✅ litellm-secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: litellm-secrets
+type: Opaque
+data:
+  OPENAI_API_KEY: <base64-encoded-openai-key>
+  GOOGLE_API_KEY: <base64-encoded-gemini-key>
+
+# Example:
+# echo -n "sk-xxxx" | base64
+
+---
+# ✅ litellm-config.yaml (ConfigMap with model list)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: litellm-config
+data:
+  config.yaml: |
+    model_list:
+      - model_name: gpt-4
+        litellm_provider: openai
+        api_key: os.environ/OPENAI_API_KEY
+
+      - model_name: gemini-pro
+        litellm_provider: google
+        api_key: os.environ/GOOGLE_API_KEY
+
+---
+# ✅ litellm-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: litellm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: litellm
+  template:
+    metadata:
+      labels:
+        app: litellm
+    spec:
+      containers:
+        - name: litellm
+          image: ghcr.io/berriai/litellm:main
+          ports:
+            - containerPort: 4000
+          env:
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: litellm-secrets
+                  key: OPENAI_API_KEY
+            - name: GOOGLE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: litellm-secrets
+                  key: GOOGLE_API_KEY
+          volumeMounts:
+            - name: config-volume
+              mountPath: /app/config.yaml
+              subPath: config.yaml
+      volumes:
+        - name: config-volume
+          configMap:
+            name: litellm-config
+
+---
+# ✅ litellm-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: litellm-service
+spec:
+  selector:
+    app: litellm
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 4000
+  type: LoadBalancer
+
+---
+# ✅ weaviate-updated-deployment.yaml (patch)
+# Add these envs to your existing Weaviate deployment spec
+# under `spec.template.spec.containers[0].env`
+
+- name: GENERATIVE_MODULES
+  value: "generative-openai"
+
+- name: OPENAI_APIKEY
+  value: "dummy"
+
+- name: OPENAI_BASE_URL
+  value: "http://litellm-service.banknotes.svc.cluster.local/v1"
+
+---
+# ✅ test-curl.sh
+# Usage: bash test-curl.sh after LiteLLM is deployed
+
+curl http://<EXTERNAL-IP>/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-4",
+    "messages": [
+      {"role": "user", "content": "Hi LiteLLM Proxy"}
+    ]
+  }'
+
+---
+# ✅ test-graphql.txt (Weaviate query)
+{
+  Get {
+    BankNote {
+      note
+      _additional {
+        generate(
+          groupedResult: true
+          prompt: "Summarize this note"
+        )
+      }
+    }
+  }
+}
